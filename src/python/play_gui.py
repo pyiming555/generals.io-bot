@@ -144,7 +144,7 @@ DC = [0, 0, -1, 1]
 
 
 class GeneralsGUI:
-    def __init__(self, model_path, n_mcts, human_player, seed):
+    def __init__(self, model_path, n_mcts, human_player, seed=None):
         pygame.init()
         self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
         pygame.display.set_caption("Generals.io RL Debugger - Human vs AI")
@@ -157,6 +157,8 @@ class GeneralsGUI:
         self.n_mcts = n_mcts
         self.human_player = human_player
         self.ai_player = 1 - human_player
+        if seed is None:
+            seed = np.random.randint(0, 2**31)
 
         # --- C++ 引擎 ---
         self.state = _lib.generals_create(GRID_SIZE, GRID_SIZE, 600, seed)

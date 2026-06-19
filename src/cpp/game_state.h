@@ -46,14 +46,18 @@ struct GameState {
         std::memset(terrain, T_EMPTY, sizeof(terrain));
         is_alive[0] = is_alive[1] = true;
 
-        // 山脉 (15%)
+        // 山脉 (15%, 避开将军位置)
         int n_mountains = int(width * height * 0.15);
         for (int i = 0; i < n_mountains; ++i) {
             int r = rng() % height, c = rng() % width;
-            terrain[idx(r, c)] = T_MOUNTAIN;
+            int pos = idx(r, c);
+            // 不能覆盖将军 (将军稍后生成在空地上)
+            if (terrain[pos] == T_EMPTY) {
+                terrain[pos] = T_MOUNTAIN;
+            }
         }
 
-        // 中立城市 (4-6 个, 15-25 兵力)
+        // 中立城市 (4-6 个, 15-25 兵力, 不能覆盖山脉)
         int n_cities = 4 + (rng() % 3);
         for (int i = 0; i < n_cities; ++i) {
             int r = 1 + (rng() % (height - 2));
@@ -65,19 +69,34 @@ struct GameState {
             }
         }
 
-        // 红方将军 (左上)
-        int p0_r = rng() % 4, p0_c = rng() % 4;
-        int p0_pos = idx(p0_r, p0_c);
-        terrain[p0_pos] = T_GENERAL; owner[p0_pos] = 0; army[p0_pos] = 1;
-
-        // 蓝方将军 (右下)
-        int p1_r = height - 4 + (rng() % 4);
-        int p1_c = width  - 4 + (rng() % 4);
-        while (p1_r == p0_r && p1_c == p0_c) {
-            p1_r = height - 4 + (rng() % 4);
-            p1_c = width  - 4 + (rng() % 4);
+        // 双方将军: 随机位置 + 最小曼哈顿距离约束
+        // 将军必须放在空地上 (避开山脉和城市)
+        int p0_r, p0_c, p1_r, p1_c;
+        int min_dist = 8;  // 12x12 地图最小距离 8
+        int max_attempts = 100;
+        bool found = false;
+        for (int attempt = 0; attempt < max_attempts; ++attempt) {
+            p0_r = rng() % height;
+            p0_c = rng() % width;
+            p1_r = rng() % height;
+            p1_c = rng() % width;
+            int pos0 = idx(p0_r, p0_c);
+            int pos1 = idx(p1_r, p1_c);
+            // 必须在空地上 + 曼哈顿距离 >= min_dist
+            if (terrain[pos0] == T_EMPTY && terrain[pos1] == T_EMPTY
+                && std::abs(p0_r - p1_r) + std::abs(p0_c - p1_c) >= min_dist) {
+                found = true;
+                break;
+            }
         }
+        // Fallback: 如果拒绝采样失败, 使用对角线位置
+        if (!found) {
+            p0_r = 1; p0_c = 1;
+            p1_r = height - 2; p1_c = width - 2;
+        }
+        int p0_pos = idx(p0_r, p0_c);
         int p1_pos = idx(p1_r, p1_c);
+        terrain[p0_pos] = T_GENERAL; owner[p0_pos] = 0; army[p0_pos] = 1;
         terrain[p1_pos] = T_GENERAL; owner[p1_pos] = 1; army[p1_pos] = 1;
     }
 
