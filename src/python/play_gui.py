@@ -506,6 +506,17 @@ class GeneralsGUI:
             txt_rect = txt.get_rect(center=rect.center)
             self.screen.blit(txt, txt_rect)
 
+        # 地形图形标记 (城池=方块, 将军=菱形, 领土=无)
+        cx, cy = rect.center
+        mark_color = (255, 255, 255) if (a > 0 and color[0] * 0.299 + color[1] * 0.587 + color[2] * 0.114 < 128) else (30, 30, 30)
+        if t == 3:  # CITY: 小方块
+            half = 5
+            pygame.draw.rect(self.screen, mark_color, (cx - half, cy - half, half * 2, half * 2), 1)
+        elif t == 2:  # GENERAL: 菱形
+            half = 6
+            pts = [(cx, cy - half), (cx + half, cy), (cx, cy + half), (cx - half, cy)]
+            pygame.draw.polygon(self.screen, mark_color, pts, 1)
+
         # 选中框 (白色粗框)
         if self.selected_tile == (x, y):
             pygame.draw.rect(self.screen, COLORS["select"], rect, 3, border_radius=3)
