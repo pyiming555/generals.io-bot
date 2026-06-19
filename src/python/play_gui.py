@@ -145,7 +145,7 @@ class GeneralsGUI:
     def __init__(self, model_path, n_mcts, human_player, seed):
         pygame.init()
         self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
-        pygame.display.set_caption("Generals.io RL Debugger — Human vs AI")
+        pygame.display.set_caption("Generals.io RL Debugger - Human vs AI")
         self.clock = pygame.time.Clock()
         self.font_large = pygame.font.SysFont("arial", 22, bold=True)
         self.font = pygame.font.SysFont("arial", 16)
@@ -614,7 +614,7 @@ class GeneralsGUI:
             txt_rect = txt_skip.get_rect(center=skip_rect.center)
             self.screen.blit(txt_skip, txt_rect)
 
-        hints = "WASD/方向键移动 | 空格Skip | Enter选中 | ←→复盘 | F迷雾 | R重开 | Q退出"
+        hints = "WASD/Arrows: move | Space: skip | Enter/Click: select | <: replay | F: fog | R: restart | Q: quit"
         txt_hint = self.font_small.render(hints, True, COLORS["text_dim"])
         self.screen.blit(txt_hint, (WIDTH // 2 - 160, ui_y + 72))
 
