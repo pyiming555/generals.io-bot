@@ -506,10 +506,10 @@ class GeneralsGUI:
         else:
             mark_color = (180, 180, 60)   # 中立: 黄色
         if t == 3:  # CITY: 方块
-            half = 5
+            half = 8
             pygame.draw.rect(self.screen, mark_color, (cx - half, cy - half, half * 2, half * 2))
         elif t == 2:  # GENERAL: 菱形
-            half = 6
+            half = 9
             pts = [(cx, cy - half), (cx + half, cy), (cx, cy + half), (cx - half, cy)]
             pygame.draw.polygon(self.screen, mark_color, pts)
 
