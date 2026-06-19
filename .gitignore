@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Large model/data files (track with git-lfs or keep local)
+*.pt
+*.ptl
+*.pkl
+*.npz
+*.npy
+*.so
+*.zip
+
+# LibTorch (huge)
+libtorch/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

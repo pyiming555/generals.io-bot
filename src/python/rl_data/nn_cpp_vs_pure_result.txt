@@ -1,0 +1,5 @@
+C++ LibTorch NN vs 纯MCTS
+模型: policy_value_v3.ptl
+对局: 6
+NN+MCTS: 3胜 (50.0%)
+纯MCTS:  3胜 (50.0%)
