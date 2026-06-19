@@ -96,7 +96,102 @@ research/
 
 ---
 
-## 3. 可借鉴的算法点子
+## 3. harrischristiansen/generals-bot (原始版本)
+
+**仓库**: https://github.com/harrischristiansen/generals-bot
+**语言**: Python | **类型**: 规则 AI (客户端 Bot)
+**作者**: Harris Christiansen
+
+### 代码结构 (精简版)
+
+```
+generals-bot-harris/
+├── base/
+│   ├── bot_base.py       # 主循环, WebSocket 通信, 地图解析
+│   ├── bot_moves.py      # 核心移动逻辑 (所有策略的底座)
+│   └── viewer.py         # 可视化
+├── bot_blob.py           # 策略1: 暴兵推土机
+├── bot_path_collect.py   # 策略2: 路径收集 + 主攻
+├── bot_control.py        # 策略3: 人类控制 (调试用)
+└── startup.py            # 启动入口
+```
+
+### 核心算法解析
+
+#### 3.1 `move_priority` — 优先级捕获 (将军/城市防守)
+```python
+# 遍历所有将军和城市邻居, 如果我方兵力 > 敌方兵力 + 1, 优先攻击
+for tile in generals_and_cities:
+    for neighbor in tile.neighbors():
+        if neighbor.isSelf() and neighbor.army > tile.army + 1:
+            return (neighbor, tile)  # 攻击!
+```
+**核心思想**: 将军和城市是最关键的防守点, 优先确保它们不被偷袭.
+
+#### 3.2 `move_outward` — 向外扩张
+```python
+# 遍历所有己方格子, 找兵力 >= 2 的, 尝试攻击路径上的邻居
+for source in gamemap.tiles[player_index]:
+    if source.army >= 2:
+        target = source.neighbor_to_attack(path)
+        if target and not target.isSwamp:
+            return (source, target)
+```
+**核心思想**: 只要邻居可以攻击(兵力足够), 就向外推进.
+
+#### 3.3 `path_proximity_target` — 最近目标路径
+```python
+# 从最大兵力格子出发, 找最近的目标, 生成路径
+source = gamemap.find_largest_tile(includeGeneral=0.5)
+target = source.nearest_target_tile()
+path = source.path_to(target)
+```
+**核心思想**: 大兵团不盲目移动, 始终朝向最近的目标.
+
+#### 3.4 `_move_path_capture` — 路径兵力累积
+```python
+# 沿路径从终点向起点累积兵力
+# 当累积兵力 > 0 时, 从该点向终点移动
+for i, tile in reversed(list(enumerate(path))):
+    if tile.tile == source.tile:
+        capture_army += (tile.army - 1)  # 己方: 累加
+    else:
+        capture_army -= tile.army        # 敌方: 减去
+    if capture_army > 0 and path[i].army > 1:
+        return (path[i], path[i+1])  # 从这点出发能赢!
+```
+**核心思想**: 路径上的兵力可以"接力"累积, 即使单个格子打不过, 整条路径的兵力汇总后可能打穿!
+
+#### 3.5 `should_move_half` — 半兵策略
+```python
+# 250 步后, 将军偶尔出半兵 (增加机动性)
+if gamemap.turn > 250:
+    if source.isGeneral:
+        return random.choice([True, True, True, False])  # 75% 出半兵
+    elif source.isCity and gamemap.turn - source.turn_captured < 16:
+        return True  # 刚占领的城市出半兵扩张
+```
+**核心思想**: 后期将军需要快速机动, 半兵可以提高频率.
+
+### 与我们的 V6 对比
+
+| 特性 | Harris (原版) | 我们的 V6 |
+|:--|:--|:--|
+| **兵力收集** | `path_gather` (最大→第二大) | BFS 有向树 (多对一) |
+| **主攻方向** | `path_proximity_target` (最近目标) | BFS 有向树 (全局梯度) |
+| **路径累积** | `_move_path_capture` (兵力接力) | 无 (单步移动) |
+| **防守** | `move_priority` (将军/城市优先) | 危机雷达 + 咽喉点 |
+| **迷雾** | 无 | ghost_grid 残影追踪 |
+| **扩张** | `move_outward` (任意方向) | 有向树引导 |
+
+### 可借鉴的关键点
+1. **`_move_path_capture` 兵力接力** — 我们的 V6 是单步有向树, 没有"整条路径汇总兵力"的概念
+2. **`move_priority` 防守优先** — 将军/城市的防守优先级应该高于一切扩张
+3. **`should_move_half` 后期半兵** — 250步后将军需要机动性
+
+---
+
+## 4. 可借鉴的算法点子
 
 ### 3.1 兵力收集优化 (来自 EklipZ)
 ```
