@@ -463,34 +463,9 @@ class GeneralsGUI:
         is_fogged = self.show_fog and fog_mask[y, x]
 
         if is_fogged:
-            # 迷雾区: 只画地形轮廓 (暗色)，不画兵力
-            t = terrain[y, x]
-            if t == 1:  # MOUNTAIN: 深灰三角形轮廓
-                color = (30, 30, 30)
-                pygame.draw.rect(self.screen, color, rect, border_radius=3)
-                # 山脉三角
-                cx, cy = rect.center
-                pts = [(cx, cy - 12), (cx - 10, cy + 8), (cx + 10, cy + 8)]
-                pygame.draw.polygon(self.screen, (50, 50, 50), pts)
-            elif t == 3:  # CITY: 暗黄色方块轮廓
-                color = (50, 45, 15)
-                pygame.draw.rect(self.screen, color, rect, border_radius=3)
-                # 城市方块
-                inner = rect.inflate(-16, -16)
-                pygame.draw.rect(self.screen, (80, 70, 25), inner, border_radius=2)
-            elif t == 2:  # GENERAL: 暗色菱形
-                color = (35, 35, 35)
-                pygame.draw.rect(self.screen, color, rect, border_radius=3)
-                cx, cy = rect.center
-                pts = [(cx, cy - 10), (cx + 10, cy), (cx, cy + 10), (cx - 10, cy)]
-                pygame.draw.polygon(self.screen, (60, 60, 60), pts)
-            else:
-                color = COLORS["fog"]
-                pygame.draw.rect(self.screen, color, rect, border_radius=3)
-            # 迷雾标记: 半透明覆盖
-            s = pygame.Surface((TILE_SIZE - 2, TILE_SIZE - 2), pygame.SRCALPHA)
-            s.fill((0, 0, 0, 100))
-            self.screen.blit(s, rect)
+            # 迷雾区: 完全不可见 (纯黑)
+            color = (10, 10, 10)
+            pygame.draw.rect(self.screen, color, rect, border_radius=3)
             return
 
         # 非迷雾区: 正常绘制
