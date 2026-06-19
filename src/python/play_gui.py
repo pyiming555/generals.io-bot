@@ -68,6 +68,8 @@ _lib.generals_clone.argtypes = [_c_void_p]
 _lib.generals_clone.restype = _c_void_p
 _lib.generals_get_grid_data.argtypes = [_c_void_p, _c_int8_p, _c_int16_p, _c_uint8_p]
 _lib.generals_get_grid_data.restype = None
+_lib.generals_step_dual.argtypes = [_c_void_p, ctypes.c_int, ctypes.c_int]
+_lib.generals_step_dual.restype = ctypes.c_int
 _lib.generals_get_action_mask.argtypes = [_c_void_p, _c_bool_p, ctypes.c_int]
 _lib.generals_get_action_mask.restype = None
 
@@ -203,6 +205,7 @@ class GeneralsGUI:
         self.selected_tile = None
         self.hover_tile = None
         self.cursor_tile = None  # 键盘光标位置 (None=未启用, (x,y)=启用)
+        self.pending_human_action = None  # 人类动作 (等待 AI 算完后同时执行)
         self.mode = "PLAY"
         self.current_step_idx = 0
         self.show_fog = True
@@ -271,8 +274,8 @@ class GeneralsGUI:
         return (sx, sy, dx, dy, is_half)
 
     def trigger_ai_turn(self):
-        """AI 回合: 通过 BeliefState 做 MCTS+NN 推理"""
-        if self.game_over:
+        """双方同时行动: 人类动作 + AI 动作一起执行，只 tick 一次"""
+        if self.game_over or self.pending_human_action is None:
             return
 
         self.ai_thinking = True
@@ -284,7 +287,7 @@ class GeneralsGUI:
 
         # 2. MCTS + NN 搜索 (在 libgenerals_nn.so 中)
         if self.nn_ptr:
-            action_id = _lib_nn.mcts_search_nn_auto(
+            ai_action = _lib_nn.mcts_search_nn_auto(
                 self.mcts_engine,
                 self.ai_belief,
                 self.ai_player,
@@ -294,16 +297,17 @@ class GeneralsGUI:
             )
         else:
             # 纯 MCTS (无 NN) — 在 libgenerals.so 中
-            action_id = _lib.mcts_search_flow(self.mcts_engine, self.ai_belief, self.ai_player, 4, self.n_mcts)
+            ai_action = _lib.mcts_search_flow(self.mcts_engine, self.ai_belief, self.ai_player, 4, self.n_mcts)
 
         elapsed = time.time() - t0
         self.ai_think_time.append(elapsed)
         self.ai_thinking = False
 
-        # 3. 执行动作
-        if action_id >= 0:
-            _lib.generals_step(self.state, action_id)
-            self.save_history()
+        # 3. 双方同时执行动作 (只 tick 一次)
+        human_action = self.pending_human_action
+        self.pending_human_action = None
+        _lib.generals_step_dual(self.state, human_action, ai_action)
+        self.save_history()
 
         # 检查游戏结束
         self.winner = _lib.generals_get_winner(self.state)
@@ -347,17 +351,10 @@ class GeneralsGUI:
                     # 检查合法性
                     mask = self.get_action_mask(self.state, self.human_player)
                     if mask[action_id]:
-                        _lib.generals_step(self.state, action_id)
-                        self.save_history()
+                        # 不立即执行! 记录动作, 等 AI 算完后同时执行
+                        self.pending_human_action = action_id
                         self.selected_tile = None
-
-                        # 检查游戏结束
-                        self.winner = _lib.generals_get_winner(self.state)
-                        if self.winner != -1 or _lib.generals_is_stalemate(self.state):
-                            self.game_over = True
-                            return
-
-                        # 触发 AI 回合
+                        # 触发 AI 计算 (双方动作会在 trigger_ai_turn 中同时执行)
                         self.trigger_ai_turn()
                     else:
                         self.selected_tile = None
@@ -404,14 +401,9 @@ class GeneralsGUI:
                 action_id = self.encode_action(sx, sy, nx, ny, False)
                 mask = self.get_action_mask(self.state, self.human_player)
                 if mask[action_id]:
-                    _lib.generals_step(self.state, action_id)
-                    self.save_history()
+                    self.pending_human_action = action_id
                     self.selected_tile = None
                     self.cursor_tile = (nx, ny)
-                    self.winner = _lib.generals_get_winner(self.state)
-                    if self.winner != -1 or _lib.generals_is_stalemate(self.state):
-                        self.game_over = True
-                        return True
                     self.trigger_ai_turn()
                     return True
             # 不可移动: 切换选中目标
@@ -429,21 +421,11 @@ class GeneralsGUI:
             return True
 
     def do_skip(self):
-        """人类玩家跳过回合"""
+        """人类玩家跳过回合 (记录 SKIP action, 等 AI 算完后同时执行)"""
         if self.game_over or self.ai_thinking:
             return
-        skip_action = self.SKIP_ACTION
-        _lib.generals_step(self.state, skip_action)
-        self.save_history()
+        self.pending_human_action = self.SKIP_ACTION
         self.selected_tile = None
-
-        # 检查游戏结束
-        self.winner = _lib.generals_get_winner(self.state)
-        if self.winner != -1 or _lib.generals_is_stalemate(self.state):
-            self.game_over = True
-            return
-
-        # 触发 AI 回合
         self.trigger_ai_turn()
 
     def get_skip_button_rect(self):
@@ -785,9 +767,13 @@ def main():
                         help="MCTS iterations per move (default: 260)")
     parser.add_argument("--human-player", type=int, default=0, choices=[0, 1],
                         help="Human player ID: 0=red, 1=blue (default: 0)")
-    parser.add_argument("--seed", type=int, default=42,
-                        help="Random seed (default: 42)")
+    parser.add_argument("--seed", type=int, default=None,
+                        help="Random seed (default: random)")
     args = parser.parse_args()
+
+    # 随机 seed (如果未指定)
+    if args.seed is None:
+        args.seed = np.random.randint(0, 2**31)
 
     # 模型路径 — 转为绝对路径 (C++ 层需要绝对路径)
     model_path = args.model
