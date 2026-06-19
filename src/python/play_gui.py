@@ -506,15 +506,15 @@ class GeneralsGUI:
             txt_rect = txt.get_rect(center=rect.center)
             self.screen.blit(txt, txt_rect)
 
-        # 地形图形标记 (城池=方块, 将军=菱形, 领土=无)
+        # 地形图形标记 (城池=三角, 将军=方块, 领土=无)
         # 放在右下角，不遮挡兵力数字
-        if t == 3:  # CITY: 小方块 (右下角)
+        if t == 3:  # CITY: 倒三角 ▽ (右下角)
+            bx, by = rect.right - 7, rect.bottom - 7
+            pts = [(bx - 4, by - 3), (bx + 4, by - 3), (bx, by + 3)]
+            pygame.draw.polygon(self.screen, (100, 100, 100), pts, 1)
+        elif t == 2:  # GENERAL: 方块 ■ (右下角)
             bx, by = rect.right - 8, rect.bottom - 8
-            pygame.draw.rect(self.screen, (80, 80, 80), (bx, by, 5, 5), 1)
-        elif t == 2:  # GENERAL: 菱形 (右下角)
-            bx, by = rect.right - 8, rect.bottom - 8
-            pts = [(bx - 2, by), (bx, by - 2), (bx + 2, by), (bx, by + 2)]
-            pygame.draw.polygon(self.screen, (80, 80, 80), pts, 1)
+            pygame.draw.rect(self.screen, (100, 100, 100), (bx, by, 6, 6), 1)
 
         # 选中框 (白色粗框)
         if self.selected_tile == (x, y):
