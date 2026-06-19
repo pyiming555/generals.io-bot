@@ -320,10 +320,10 @@ class GeneralsGUI:
             return
 
         if self.selected_tile is None:
-            # 选中起点: 必须是己方领地且兵力 > 1
+            # 选中起点: 必须是己方领地 (主城1兵也可以选，用于后续skip)
             owner, army, terrain = self.get_grid_data(self.state)
             x, y = tile
-            if owner[y, x] == self.human_player and army[y, x] > 1:
+            if owner[y, x] == self.human_player and army[y, x] >= 1:
                 self.selected_tile = tile
         else:
             # 移动或取消选中
@@ -331,6 +331,7 @@ class GeneralsGUI:
             dx, dy = tile
 
             if (dx, dy) == (sx, sy):
+                # 点击自己 = 取消选中
                 self.selected_tile = None
                 return
 
@@ -359,10 +360,38 @@ class GeneralsGUI:
             else:
                 # 点击不相邻的格子: 如果点击己方领地则切换选中
                 owner, army, terrain = self.get_grid_data(self.state)
-                if owner[dy, dx] == self.human_player and army[dy, dx] > 1:
+                if owner[dy, dx] == self.human_player and army[dy, dx] >= 1:
                     self.selected_tile = tile
                 else:
                     self.selected_tile = None
+
+    def do_skip(self):
+        """人类玩家跳过回合"""
+        if self.game_over or self.ai_thinking:
+            return
+        skip_action = self.SKIP_ACTION
+        _lib.generals_step(self.state, skip_action)
+        self.save_history()
+        self.selected_tile = None
+
+        # 检查游戏结束
+        self.winner = _lib.generals_get_winner(self.state)
+        if self.winner != -1 or _lib.generals_is_stalemate(self.state):
+            self.game_over = True
+            return
+
+        # 触发 AI 回合
+        self.trigger_ai_turn()
+
+    def get_skip_button_rect(self):
+        """返回 Skip 按钮的 pygame.Rect (如果当前是人类回合则显示)"""
+        if self.mode != "PLAY" or self.game_over or self.ai_thinking:
+            return None
+        # 按钮在右下角
+        btn_w, btn_h = 80, 30
+        btn_x = WIDTH - btn_w - 10
+        btn_y = GRID_SIZE * TILE_SIZE + (UI_HEIGHT - btn_h) // 2
+        return pygame.Rect(btn_x, btn_y, btn_w, btn_h)
 
     def draw_tile(self, x, y, owner, army, terrain, fog_mask):
         """绘制单个格子"""
@@ -494,9 +523,20 @@ class GeneralsGUI:
             self.screen.blit(txt_time, (WIDTH - 200, ui_y + 8))
 
         # --- 底部: 操作提示 ---
-        hints = "← → Replay | F Fog | R Restart | Q Quit"
+        # --- Skip 按钮 ---
+        skip_rect = self.get_skip_button_rect()
+        if skip_rect:
+            # 按钮背景
+            pygame.draw.rect(self.screen, (80, 80, 80), skip_rect, border_radius=5)
+            pygame.draw.rect(self.screen, COLORS["text_dim"], skip_rect, 1, border_radius=5)
+            # 按钮文字
+            txt_skip = self.font.render("Skip", True, COLORS["text"])
+            txt_rect = txt_skip.get_rect(center=skip_rect.center)
+            self.screen.blit(txt_skip, txt_rect)
+
+        hints = "← → Replay | F Fog | Space Skip | R Restart | Q Quit"
         txt_hint = self.font_small.render(hints, True, COLORS["text_dim"])
-        self.screen.blit(txt_hint, (WIDTH // 2 - 130, ui_y + 72))
+        self.screen.blit(txt_hint, (WIDTH // 2 - 160, ui_y + 72))
 
     def render(self):
         """渲染一帧"""
@@ -561,7 +601,12 @@ class GeneralsGUI:
 
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     if self.mode == "PLAY":
-                        self.handle_human_action(event.pos, event.button)
+                        # 检查是否点击了 Skip 按钮
+                        skip_rect = self.get_skip_button_rect()
+                        if skip_rect and skip_rect.collidepoint(event.pos):
+                            self.do_skip()
+                        else:
+                            self.handle_human_action(event.pos, event.button)
 
                 elif event.type == pygame.MOUSEMOTION:
                     self.hover_tile = self.get_tile_at(event.pos)
@@ -585,6 +630,9 @@ class GeneralsGUI:
                         self.winner = -1
                         self.selected_tile = None
                         self.mode = "PLAY"
+
+                    elif event.key == pygame.K_SPACE:
+                        self.do_skip()
 
                     elif event.key == pygame.K_LEFT:
                         if self.mode == "PLAY":
