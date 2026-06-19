@@ -30,3 +30,7 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Research (cloned repos - not part of this project)
+research/generals-bot/
+research/generals-bots/
