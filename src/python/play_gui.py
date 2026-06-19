@@ -481,9 +481,9 @@ class GeneralsGUI:
             color = COLORS["mountain"]
         elif t == 3:  # CITY: 根据占领者变色
             if o == 0:
-                color = (200, 170, 50)  # 红方占领: 亮红黄
+                color = (220, 120, 120)  # 红方占领: 红色
             elif o == 1:
-                color = (80, 80, 200)  # 蓝方占领: 亮蓝
+                color = (120, 120, 220)  # 蓝方占领: 蓝色
             else:
                 color = COLORS["city"]  # 中立: 黄色
         elif t == 2:  # GENERAL
