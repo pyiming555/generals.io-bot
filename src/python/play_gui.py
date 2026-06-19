@@ -497,16 +497,7 @@ class GeneralsGUI:
 
         pygame.draw.rect(self.screen, color, rect, border_radius=3)
 
-        # 兵力数字
-        if a > 0 and t != 1:
-            # 城池/领地兵力
-            brightness = color[0] * 0.299 + color[1] * 0.587 + color[2] * 0.114
-            text_color = (255, 255, 255) if brightness < 128 else (20, 20, 20)
-            txt = self.font.render(str(int(a)), True, text_color)
-            txt_rect = txt.get_rect(center=rect.center)
-            self.screen.blit(txt, txt_rect)
-
-        # 地形图形标记 (中心填充，使用选手颜色)
+        # 地形图形标记 (先画，作为底层)
         cx, cy = rect.center
         if o == 0:
             mark_color = (220, 80, 80)    # 红方: 红色
@@ -521,6 +512,14 @@ class GeneralsGUI:
             half = 6
             pts = [(cx, cy - half), (cx + half, cy), (cx, cy + half), (cx - half, cy)]
             pygame.draw.polygon(self.screen, mark_color, pts)
+
+        # 兵力数字 (后画，显示在标记之上)
+        if a > 0 and t != 1:
+            brightness = color[0] * 0.299 + color[1] * 0.587 + color[2] * 0.114
+            text_color = (255, 255, 255) if brightness < 128 else (20, 20, 20)
+            txt = self.font.render(str(int(a)), True, text_color)
+            txt_rect = txt.get_rect(center=rect.center)
+            self.screen.blit(txt, txt_rect)
 
         # 选中框 (白色粗框)
         if self.selected_tile == (x, y):
