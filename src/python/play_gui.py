@@ -323,8 +323,7 @@ class GeneralsGUI:
             # 选中起点: 必须是己方领地且兵力 > 1
             owner, army, terrain = self.get_grid_data(self.state)
             x, y = tile
-            idx = y * GRID_SIZE + x
-            if owner[idx] == self.human_player and army[idx] > 1:
+            if owner[y, x] == self.human_player and army[y, x] > 1:
                 self.selected_tile = tile
         else:
             # 移动或取消选中
@@ -360,8 +359,7 @@ class GeneralsGUI:
             else:
                 # 点击不相邻的格子: 如果点击己方领地则切换选中
                 owner, army, terrain = self.get_grid_data(self.state)
-                idx = dy * GRID_SIZE + dx
-                if owner[idx] == self.human_player and army[idx] > 1:
+                if owner[dy, dx] == self.human_player and army[dy, dx] > 1:
                     self.selected_tile = tile
                 else:
                     self.selected_tile = None
