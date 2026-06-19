@@ -397,14 +397,27 @@ class GeneralsGUI:
         """绘制单个格子"""
         rect = pygame.Rect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE - 2, TILE_SIZE - 2)
 
-        is_fogged = self.show_fog and fog_mask[y, x] and self.human_player == 0
+        is_fogged = self.show_fog and fog_mask[y, x]
 
         if is_fogged:
-            color = COLORS["fog"]
+            # 迷雾区: 只画地形轮廓 (暗色)，不画兵力
+            t = terrain[y, x]
+            if t == 1:  # MOUNTAIN
+                color = (25, 25, 25)
+            elif t == 3:  # CITY
+                color = (60, 55, 20)
+            elif t == 2:  # GENERAL
+                color = (40, 40, 40)
+            else:
+                color = COLORS["fog"]
             pygame.draw.rect(self.screen, color, rect, border_radius=3)
+            # 迷雾标记: 画一个半透明层
+            s = pygame.Surface((TILE_SIZE - 2, TILE_SIZE - 2), pygame.SRCALPHA)
+            s.fill((0, 0, 0, 120))
+            self.screen.blit(s, rect)
             return
 
-        # 地形底色
+        # 非迷雾区: 正常绘制
         t = terrain[y, x]
         o = owner[y, x]
         a = army[y, x]
@@ -546,18 +559,18 @@ class GeneralsGUI:
         owner, army, terrain = self.get_grid_data(state_ptr)
 
         # 计算迷雾 (人类玩家的视角)
+        # 规则: 己方领地 + 与己方领地相邻的所有格子均可见
         fog_mask = np.ones((GRID_SIZE, GRID_SIZE), dtype=bool)
         if self.show_fog:
             for y in range(GRID_SIZE):
                 for x in range(GRID_SIZE):
                     if owner[y, x] == self.human_player:
                         fog_mask[y, x] = False  # 自己可见
+                        # 上下左右相邻格子也可见
                         for d in range(4):
                             ny, nx = y + DR[d], x + DC[d]
                             if 0 <= ny < GRID_SIZE and 0 <= nx < GRID_SIZE:
                                 fog_mask[ny, nx] = False
-                    else:
-                        fog_mask[y, x] = True  # 敌方迷雾
 
         # 绘制所有格子
         for y in range(GRID_SIZE):
