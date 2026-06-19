@@ -582,8 +582,8 @@ class GeneralsGUI:
                     for d in range(4):
                         sy, sx = ty + DR[d], tx + DC[d]
                         if 0 <= sy < GRID_SIZE and 0 <= sx < GRID_SIZE:
-                            if prev_owner[sy * GRID_SIZE + sx] == 1:
-                                if prev_army[sy * GRID_SIZE + sx] > curr_army[sy * GRID_SIZE + sx]:
+                            if prev_owner[sy, sx] == 1:
+                                if prev_army[sy, sx] > curr_army[sy, sx]:
                                     self.draw_arrow(sx, sy, tx, ty, d, alpha=180)
                                     break
 
