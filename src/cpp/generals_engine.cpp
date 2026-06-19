@@ -126,8 +126,8 @@ extern "C" {
 
     // ---------- 双动作步进 ----------
     int generals_step_dual(GameState* s, int action0, int action1) {
-        // 随机先后手，apply 双方动作，tick，检查胜负
-        bool red_first = (s->rng() % 2 == 0);
+        // 固定红方先手（与训练时 MCTS 推演一致）
+        bool red_first = true;
         if (red_first) {
             int r0, c0, dir0, half0;
             if (s->decode_action(action0, r0, c0, dir0, half0))
