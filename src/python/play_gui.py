@@ -463,8 +463,16 @@ class GeneralsGUI:
         is_fogged = self.show_fog and fog_mask[y, x]
 
         if is_fogged:
-            # 迷雾区: 完全不可见 (纯黑)
-            color = (10, 10, 10)
+            # 迷雾区: 特殊格(山/城)稍深, 普通格纯黑
+            t = terrain[y, x]
+            if t == 1:  # MOUNTAIN
+                color = (18, 18, 18)  # 极深灰
+            elif t == 3:  # CITY
+                color = (20, 18, 10)  # 极深黄
+            elif t == 2:  # GENERAL
+                color = (22, 18, 18)  # 极深红
+            else:
+                color = (10, 10, 10)  # 普通格纯黑
             pygame.draw.rect(self.screen, color, rect, border_radius=3)
             return
 
