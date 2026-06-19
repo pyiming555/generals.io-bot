@@ -208,6 +208,7 @@ class GeneralsGUI:
         self.hover_tile = None
         self.cursor_tile = None  # 键盘光标位置 (None=未启用, (x,y)=启用)
         self.pending_human_action = None  # 人类动作 (等待 AI 算完后同时执行)
+        self.half_move_mode = False  # 是否出半兵
         self.mode = "PLAY"
         self.current_step_idx = 0
         self.show_fog = True
@@ -367,6 +368,8 @@ class GeneralsGUI:
             x, y = tile
             if owner[y, x] == self.human_player and army[y, x] >= 1:
                 self.selected_tile = tile
+                # 右键点击: 标记为半兵模式
+                self.half_move_mode = (button == 3)
         else:
             # 移动或取消选中
             sx, sy = self.selected_tile
@@ -375,10 +378,11 @@ class GeneralsGUI:
             if (dx, dy) == (sx, sy):
                 # 点击自己 = 取消选中
                 self.selected_tile = None
+                self.half_move_mode = False
                 return
 
             if self.is_adjacent((sx, sy), (dx, dy)):
-                is_half = (button == 3)  # 右键 = 半兵
+                is_half = self.half_move_mode  # 右键选中的 = 半兵模式
                 action_id = self.encode_action(sx, sy, dx, dy, is_half)
 
                 if action_id >= 0:
@@ -388,17 +392,21 @@ class GeneralsGUI:
                         # 不立即执行! 记录动作, 等 AI 算完后同时执行
                         self.pending_human_action = action_id
                         self.selected_tile = None
+                        self.half_move_mode = False
                         # 触发 AI 计算 (双方动作会在 trigger_ai_turn 中同时执行)
                         self.trigger_ai_turn()
                     else:
                         self.selected_tile = None
+                        self.half_move_mode = False
             else:
                 # 点击不相邻的格子: 如果点击己方领地则切换选中
                 owner, army, terrain = self.get_grid_data(self.state)
                 if owner[dy, dx] == self.human_player and army[dy, dx] >= 1:
                     self.selected_tile = tile
+                    self.half_move_mode = False  # 切换选中时重置
                 else:
                     self.selected_tile = None
+                    self.half_move_mode = False
 
     def handle_keyboard_move(self, direction):
         """处理键盘移动: 0=上 1=下 2=左 3=右, 返回是否成功"""
