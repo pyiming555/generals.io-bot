@@ -248,7 +248,7 @@ class GeneralsGUI:
         """编码动作: (src, dst, half) → action_id"""
         direction = -1
         for d in range(4):
-            if sx + DR[d] == dx and sy + DC[d] == dy:
+            if sy + DR[d] == dy and sx + DC[d] == dx:
                 direction = d
                 break
         if direction < 0:
