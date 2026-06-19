@@ -202,6 +202,7 @@ class GeneralsGUI:
         # --- 交互状态 ---
         self.selected_tile = None
         self.hover_tile = None
+        self.cursor_tile = None  # 键盘光标位置 (None=未启用, (x,y)=启用)
         self.mode = "PLAY"
         self.current_step_idx = 0
         self.show_fog = True
@@ -319,6 +320,9 @@ class GeneralsGUI:
             self.selected_tile = None
             return
 
+        # 如果键盘光标已激活, 鼠标点击优先
+        self.cursor_tile = None
+
         if self.selected_tile is None:
             # 选中起点: 必须是己方领地 (主城1兵也可以选，用于后续skip)
             owner, army, terrain = self.get_grid_data(self.state)
@@ -364,6 +368,65 @@ class GeneralsGUI:
                     self.selected_tile = tile
                 else:
                     self.selected_tile = None
+
+    def handle_keyboard_move(self, direction):
+        """处理键盘移动: 0=上 1=下 2=左 3=右, 返回是否成功"""
+        if self.game_over or self.ai_thinking or self.mode != "PLAY":
+            return False
+
+        # 获取当前光标位置 (首次使用选己方有兵力的格子)
+        if self.cursor_tile is None:
+            owner, army, terrain = self.get_grid_data(self.state)
+            for y in range(GRID_SIZE):
+                for x in range(GRID_SIZE):
+                    if owner[y, x] == self.human_player and army[y, x] > 1:
+                        self.cursor_tile = (x, y)
+                        break
+                if self.cursor_tile:
+                    break
+            if self.cursor_tile is None:
+                return False
+
+        cx, cy = self.cursor_tile
+        nx, ny = cx + DC[direction], cy + DR[direction]
+
+        if not (0 <= nx < GRID_SIZE and 0 <= ny < GRID_SIZE):
+            return False
+
+        # 如果当前有选中格子, 键盘移动方向 = 确认移动
+        if self.selected_tile is not None:
+            sx, sy = self.selected_tile
+            if (nx, ny) == (sx, sy):
+                self.selected_tile = None
+                self.cursor_tile = (nx, ny)
+                return True
+            if self.is_adjacent((sx, sy), (nx, ny)):
+                action_id = self.encode_action(sx, sy, nx, ny, False)
+                mask = self.get_action_mask(self.state, self.human_player)
+                if mask[action_id]:
+                    _lib.generals_step(self.state, action_id)
+                    self.save_history()
+                    self.selected_tile = None
+                    self.cursor_tile = (nx, ny)
+                    self.winner = _lib.generals_get_winner(self.state)
+                    if self.winner != -1 or _lib.generals_is_stalemate(self.state):
+                        self.game_over = True
+                        return True
+                    self.trigger_ai_turn()
+                    return True
+            # 不可移动: 切换选中目标
+            owner, army, terrain = self.get_grid_data(self.state)
+            if owner[ny, nx] == self.human_player and army[ny, nx] >= 1:
+                self.selected_tile = (nx, ny)
+                self.cursor_tile = (nx, ny)
+            else:
+                self.selected_tile = None
+                self.cursor_tile = (nx, ny)
+            return True
+        else:
+            # 无选中: 移动光标
+            self.cursor_tile = (nx, ny)
+            return True
 
     def do_skip(self):
         """人类玩家跳过回合"""
@@ -446,9 +509,13 @@ class GeneralsGUI:
             txt_rect = txt.get_rect(center=rect.center)
             self.screen.blit(txt, txt_rect)
 
-        # 选中框
+        # 选中框 (白色粗框)
         if self.selected_tile == (x, y):
             pygame.draw.rect(self.screen, COLORS["select"], rect, 3, border_radius=3)
+
+        # 键盘光标框 (青色细框)
+        if self.cursor_tile == (x, y) and self.mode == "PLAY" and not self.game_over:
+            pygame.draw.rect(self.screen, (0, 200, 200), rect, 2, border_radius=3)
 
         # 悬停高亮
         if self.hover_tile == (x, y) and self.mode == "PLAY" and not self.game_over:
@@ -547,7 +614,7 @@ class GeneralsGUI:
             txt_rect = txt_skip.get_rect(center=skip_rect.center)
             self.screen.blit(txt_skip, txt_rect)
 
-        hints = "← → Replay | F Fog | Space Skip | R Restart | Q Quit"
+        hints = "WASD/方向键移动 | 空格Skip | Enter选中 | ←→复盘 | F迷雾 | R重开 | Q退出"
         txt_hint = self.font_small.render(hints, True, COLORS["text_dim"])
         self.screen.blit(txt_hint, (WIDTH // 2 - 160, ui_y + 72))
 
@@ -646,6 +713,26 @@ class GeneralsGUI:
 
                     elif event.key == pygame.K_SPACE:
                         self.do_skip()
+
+                    elif event.key == pygame.K_RETURN:
+                        # 回车 = 选中/取消当前光标位置
+                        if self.cursor_tile:
+                            if self.selected_tile is None:
+                                owner, army, terrain = self.get_grid_data(self.state)
+                                x, y = self.cursor_tile
+                                if owner[y, x] == self.human_player and army[y, x] >= 1:
+                                    self.selected_tile = self.cursor_tile
+                            elif self.selected_tile == self.cursor_tile:
+                                self.selected_tile = None
+
+                    elif event.key == pygame.K_w or event.key == pygame.K_UP:
+                        self.handle_keyboard_move(0)  # 上
+                    elif event.key == pygame.K_s or event.key == pygame.K_DOWN:
+                        self.handle_keyboard_move(1)  # 下
+                    elif event.key == pygame.K_a or event.key == pygame.K_LEFT:
+                        self.handle_keyboard_move(2)  # 左
+                    elif event.key == pygame.K_d or event.key == pygame.K_RIGHT:
+                        self.handle_keyboard_move(3)  # 右
 
                     elif event.key == pygame.K_LEFT:
                         if self.mode == "PLAY":
