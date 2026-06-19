@@ -143,8 +143,7 @@ extern "C" {
             if (s->decode_action(action0, r0, c0, dir0, half0))
                 s->apply_move(0, r0, c0, dir0, half0);
         }
-        s->tick();
-        s->current_step++;
+        s->tick();  // tick() 内部已经 current_step++
 
         bool alive_changed = false;
         for (int p = 0; p < 2; ++p) {
