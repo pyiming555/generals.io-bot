@@ -215,6 +215,12 @@ class GeneralsGUI:
         self.winner = -1
         self.ai_thinking = False
 
+        # --- AI 模式 ---
+        self.ai_mode = "mcts"  # "mcts" 或 "script"
+        # 脚本 AI (不需要 NN, 随时可用)
+        from script_bot import ScriptBot
+        self.script_ai = ScriptBot(player_id=self.ai_player, grid_size=GRID_SIZE)
+
         # --- 预分配缓冲区 ---
         self.grid_owner_buf = (ctypes.c_int8 * (GRID_SIZE * GRID_SIZE))()
         self.grid_army_buf = (ctypes.c_int16 * (GRID_SIZE * GRID_SIZE))()
@@ -275,6 +281,23 @@ class GeneralsGUI:
         dy = sy + DC[direction]
         return (sx, sy, dx, dy, is_half)
 
+    def _get_render_state(self):
+        """获取当前渲染状态 (owner, army, terrain, fog) 供脚本 AI 使用"""
+        state_ptr = self.history[self.current_step_idx]
+        owner, army, terrain = self.get_grid_data(state_ptr)
+        # 计算迷雾 (人类玩家视角)
+        fog = np.ones((GRID_SIZE, GRID_SIZE), dtype=bool)
+        if self.show_fog:
+            for y in range(GRID_SIZE):
+                for x in range(GRID_SIZE):
+                    if owner[y, x] == self.human_player:
+                        fog[y, x] = False
+                        for d in range(4):
+                            ny, nx = y + DR[d], x + DC[d]
+                            if 0 <= ny < GRID_SIZE and 0 <= nx < GRID_SIZE:
+                                fog[ny, nx] = False
+        return owner, army, terrain, fog
+
     def trigger_ai_turn(self):
         """双方同时行动: 人类动作 + AI 动作一起执行，只 tick 一次"""
         if self.game_over or self.pending_human_action is None:
@@ -283,29 +306,38 @@ class GeneralsGUI:
         self.ai_thinking = True
         t0 = time.time()
 
-        # 1. 让 AI 观察真实世界 (更新 BeliefState)
-        current_step = _lib.generals_get_step(self.state)
-        _lib.belief_observe(self.ai_belief, self.state, current_step)
-
-        # 2. MCTS + NN 搜索 (在 libgenerals_nn.so 中)
-        if self.nn_ptr:
-            ai_action = _lib_nn.mcts_search_nn_auto(
-                self.mcts_engine,
-                self.ai_belief,
-                self.ai_player,
-                4,  # n_det
-                self.n_mcts,
-                self.nn_ptr,
-            )
+        # 根据 AI 模式选择决策方式
+        if self.ai_mode == "script":
+            # 脚本 AI: 启发式贪心 (不需要 NN 推理)
+            owner, army, terrain, fog = self._get_render_state()
+            action = self.script_ai.get_action(owner, army, terrain, fog)
+            if action:
+                sy, sx, ny, nx, is_half = action
+                ai_action = self.encode_action(sx, sy, nx, ny, is_half)
+            else:
+                ai_action = self.SKIP_ACTION
         else:
-            # 纯 MCTS (无 NN) — 在 libgenerals.so 中
-            ai_action = _lib.mcts_search_flow(self.mcts_engine, self.ai_belief, self.ai_player, 4, self.n_mcts)
+            # MCTS + NN AI
+            current_step = _lib.generals_get_step(self.state)
+            _lib.belief_observe(self.ai_belief, self.state, current_step)
+
+            if self.nn_ptr:
+                ai_action = _lib_nn.mcts_search_nn_auto(
+                    self.mcts_engine,
+                    self.ai_belief,
+                    self.ai_player,
+                    4,  # n_det
+                    self.n_mcts,
+                    self.nn_ptr,
+                )
+            else:
+                ai_action = _lib.mcts_search_flow(self.mcts_engine, self.ai_belief, self.ai_player, 4, self.n_mcts)
 
         elapsed = time.time() - t0
         self.ai_think_time.append(elapsed)
         self.ai_thinking = False
 
-        # 3. 双方同时执行动作 (只 tick 一次)
+        # 双方同时执行动作 (只 tick 一次)
         human_action = self.pending_human_action
         self.pending_human_action = None
         _lib.generals_step_dual(self.state, human_action, ai_action)
@@ -567,7 +599,7 @@ class GeneralsGUI:
         txt_mode = self.font.render(mode_text, True, COLORS["text"])
         self.screen.blit(txt_mode, (10, ui_y + 8))
 
-        step_text = f"Step: {current_step} | History: {self.current_step_idx}/{len(self.history)-1}"
+        step_text = f"Step: {current_step} | History: {self.current_step_idx}/{len(self.history)-1} | AI: {self.ai_mode.upper()}"
         txt_step = self.font_small.render(step_text, True, COLORS["text_dim"])
         self.screen.blit(txt_step, (10, ui_y + 32))
 
@@ -691,10 +723,17 @@ class GeneralsGUI:
                     if event.key == pygame.K_q:
                         running = False
 
+                    elif event.key == pygame.K_TAB:
+                        # 切换 AI 模式
+                        if self.ai_mode == "mcts":
+                            self.ai_mode = "script"
+                            print("[GUI] AI mode: Script Bot")
+                        else:
+                            self.ai_mode = "mcts"
+                            print("[GUI] AI mode: MCTS+NN")
+
                     elif event.key == pygame.K_f:
                         self.show_fog = not self.show_fog
-
-                    elif event.key == pygame.K_r:
                         # 重新开始
                         seed = np.random.randint(0, 2**31)
                         _lib.generals_reset(self.state, seed)
