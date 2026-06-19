@@ -590,11 +590,13 @@ class GeneralsGUI:
             mode_text += " | AI Thinking..."
         if self.game_over:
             if self.winner == self.human_player:
-                mode_text += " | 🏆 You Win!"
+                mode_text += " | You Win!"
             elif self.winner == self.ai_player:
-                mode_text += " | 🤖 AI Wins!"
+                mode_text += " | AI Wins!"
             elif self.winner == 2:
-                mode_text += " | 🤝 Draw!"
+                mode_text += " | Draw!"
+        if self.mode == "REPLAY":
+            mode_text += " [REPLAY]"
 
         txt_mode = self.font.render(mode_text, True, COLORS["text"])
         self.screen.blit(txt_mode, (10, ui_y + 8))
@@ -642,7 +644,7 @@ class GeneralsGUI:
             txt_rect = txt_skip.get_rect(center=skip_rect.center)
             self.screen.blit(txt_skip, txt_rect)
 
-        hints = "WASD/Arrows: move | Space: skip | Enter/Click: select | <: replay | F: fog | R: restart | Q: quit"
+        hints = "WASD: move | Space: skip | Enter/Click: select | Arrow keys: replay | Tab: AI mode | F: fog | R: restart | Q: quit"
         txt_hint = self.font_small.render(hints, True, COLORS["text_dim"])
         self.screen.blit(txt_hint, (WIDTH // 2 - 160, ui_y + 72))
 
@@ -770,31 +772,38 @@ class GeneralsGUI:
                             elif self.selected_tile == self.cursor_tile:
                                 self.selected_tile = None
 
-                    elif event.key == pygame.K_w or event.key == pygame.K_UP:
+                    # === 键盘移动 (WASD) ===
+                    elif event.key == pygame.K_w:
                         self.handle_keyboard_move(0)  # 上
-                    elif event.key == pygame.K_s or event.key == pygame.K_DOWN:
+                    elif event.key == pygame.K_s:
                         self.handle_keyboard_move(1)  # 下
-                    elif event.key == pygame.K_a or event.key == pygame.K_LEFT:
+                    elif event.key == pygame.K_a:
                         self.handle_keyboard_move(2)  # 左
-                    elif event.key == pygame.K_d or event.key == pygame.K_RIGHT:
+                    elif event.key == pygame.K_d:
                         self.handle_keyboard_move(3)  # 右
 
+                    # === 回放控制 (方向键) ===
                     elif event.key == pygame.K_LEFT:
+                        # 回放: 后退一步
                         if self.mode == "PLAY":
                             self.mode = "REPLAY"
                         self.current_step_idx = max(0, self.current_step_idx - 1)
 
                     elif event.key == pygame.K_RIGHT:
+                        # 回放: 前进一步
                         self.current_step_idx = min(len(self.history) - 1, self.current_step_idx + 1)
                         if self.current_step_idx == len(self.history) - 1:
                             self.mode = "PLAY"
 
                     elif event.key == pygame.K_UP:
-                        # 加速: 跳到最前/最后
-                        pass
+                        # 跳到最开始
+                        self.mode = "REPLAY"
+                        self.current_step_idx = 0
 
                     elif event.key == pygame.K_DOWN:
-                        pass
+                        # 跳到最新
+                        self.current_step_idx = len(self.history) - 1
+                        self.mode = "PLAY"
 
             self.render()
             self.clock.tick(60)
