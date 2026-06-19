@@ -1,11 +1,11 @@
 """
-script_bot.py — 启发式脚本 AI V4 (严格流场: 水往低处流, 蓄水破城)
+script_bot.py — 启发式脚本 AI V5 (严格流场 + 防守嗅觉)
 
 核心哲学:
   1. 绝对铁律: 水往低处流, 禁止平移/倒退 (dist_n < dist_s)
   2. 蓄水效应: 前线打不过就等后方兵力汇聚, 直到溃坝
   3. 大军主导: 同等条件下大军团优先行动
-  4. BFS 距离场: 以敌方将军/迷雾/空地为目标, 生成全局梯度
+  4. 危机雷达: 发现偷家敌军时切换引力源, 全军回防
 
 用法:
   from script_bot import ScriptBot
@@ -18,13 +18,13 @@ from collections import deque
 
 
 class ScriptBot:
-    """V4 严格流场脚本 AI"""
+    """V5 严格流场 + 防守嗅觉脚本 AI"""
 
     def __init__(self, player_id, grid_size=12):
         self.player_id = player_id
         self.enemy_id = 1 - player_id
         self.grid_size = grid_size
-        self.dirs = [(-1, 0), (1, 0), (0, -1), (0, 1)]  # 上、下、左、右
+        self.dirs = [(-1, 0), (1, 0), (0, -1), (0, 1)]
         self.enemy_general_pos = None
 
     def get_action(self, owner, army, terrain, fog):
@@ -34,33 +34,72 @@ class ScriptBot:
         """
         GS = self.grid_size
 
-        # 1. 寻找敌方将军位置 (如果已知)
-        if self.enemy_general_pos is None:
-            for y in range(GS):
-                for x in range(GS):
-                    if owner[y, x] == self.enemy_id and terrain[y, x] == 2:
-                        self.enemy_general_pos = (y, x)
-                        break
-                if self.enemy_general_pos:
+        # 1. 记忆敌方将军位置
+        for y in range(GS):
+            for x in range(GS):
+                if owner[y, x] == self.enemy_id and terrain[y, x] == 2:
+                    self.enemy_general_pos = (y, x)
                     break
+            if self.enemy_general_pos:
+                break
 
-        # 2. 构建目标矩阵 (BFS 的起点集合)
-        target_grid = np.zeros((GS, GS), dtype=bool)
-        if self.enemy_general_pos is not None:
-            # 优先目标: 敌方将军
-            target_grid[self.enemy_general_pos[0], self.enemy_general_pos[1]] = True
-        else:
-            # 如果没有发现将军, 所有迷雾和空地都是目标
+        # 2. 找到我方将军位置
+        my_general_pos = None
+        for y in range(GS):
+            for x in range(GS):
+                if owner[y, x] == self.player_id and terrain[y, x] == 2:
+                    my_general_pos = (y, x)
+                    break
+            if my_general_pos:
+                break
+
+        # ============================================
+        # 3. 危机雷达: 扫描偷家敌军
+        # ============================================
+        threat_level = 0
+        threat_pos = None
+        defense_mode = False
+
+        if my_general_pos:
+            gy, gx = my_general_pos
             for y in range(GS):
                 for x in range(GS):
-                    if owner[y, x] == self.enemy_id or fog[y, x]:
-                        target_grid[y, x] = True
-                    elif owner[y, x] == -1 and terrain[y, x] != 1:
-                        target_grid[y, x] = True
+                    # 发现敌军且兵力 > 10 (才算真正的威胁)
+                    if owner[y, x] == self.enemy_id and army[y, x] > 10:
+                        dist = abs(y - gy) + abs(x - gx)
+                        # 敌军离我家 < 6 格, 且兵力接近或超过我家将军
+                        if dist < 6 and army[y, x] > army[gy, gx] - 5:
+                            current_threat = army[y, x] / max(1, dist)
+                            if current_threat > threat_level:
+                                threat_level = current_threat
+                                threat_pos = (y, x)
 
-        # 3. BFS 生成距离场
-        dist_map = self._build_distance_map(target_grid, terrain, owner)
+        # ============================================
+        # 4. 构建目标矩阵 (根据模式切换)
+        # ============================================
+        target_grid = np.zeros((GS, GS), dtype=bool)
 
+        if threat_pos is not None:
+            # 🚨 红色警报! 全军回防, 目标锁定偷家敌军
+            target_grid[threat_pos[0], threat_pos[1]] = True
+            defense_mode = True
+        else:
+            # 正常进攻/扩张模式
+            defense_mode = False
+            if self.enemy_general_pos is not None:
+                target_grid[self.enemy_general_pos[0], self.enemy_general_pos[1]] = True
+            else:
+                for y in range(GS):
+                    for x in range(GS):
+                        if owner[y, x] == self.enemy_id or fog[y, x]:
+                            target_grid[y, x] = True
+                        elif owner[y, x] == -1 and terrain[y, x] != 1:
+                            target_grid[y, x] = True
+
+        # 5. BFS 距离场
+        dist_map = self._build_distance_map(target_grid, terrain)
+
+        # 6. 寻找最优动作
         best_action = None
         best_score = -999999
 
@@ -77,10 +116,8 @@ class ScriptBot:
                 for dr, dc in self.dirs:
                     ny, nx = sy + dr, sx + dc
 
-                    # 越界
                     if not (0 <= ny < GS and 0 <= nx < GS):
                         continue
-                    # 不能撞山
                     if terrain[ny, nx] == 1:
                         continue
 
@@ -88,27 +125,24 @@ class ScriptBot:
                     target_owner = owner[ny, nx]
                     dist_n = dist_map[ny, nx]
 
-                    # === 绝对铁律: 水往低处流！禁止平移和倒退！ ===
+                    # 绝对铁律: 水往低处流
                     if dist_n >= dist_s:
                         continue
 
-                    # === 物理定律: 打不过就别送死 (等后方兵力汇聚) ===
+                    # 打不过就等
                     if target_owner != self.player_id and arm <= target_army + 1:
                         continue
 
-                    # === 极简评分系统 ===
-                    score = 0
+                    # === 评分系统 ===
+                    score = arm  # 基础分: 大部队先动
 
                     if target_owner != self.player_id:
-                        # 攻击/占领: 最高优先级, 前线部队先动
                         score += 100000
                         if target_owner == self.enemy_id:
-                            score += 50000  # 杀敌优先
-                    # else: 己方合并, 只靠 arm 决定优先级
-
-                    # 💡 打破僵局: 同等条件下, 优先移动兵力最大的部队
-                    # 大军团像推土机一样往前碾压, 不会被后方运 2 兵的操作抢占
-                    score += arm
+                            score += 50000
+                            # 防守模式: 撞向偷家敌军给最高优先级
+                            if defense_mode and (ny, nx) == threat_pos:
+                                score += 1000000
 
                     if score > best_score:
                         best_score = score
@@ -116,23 +150,18 @@ class ScriptBot:
 
         return best_action
 
-    def _build_distance_map(self, target_grid, terrain, owner):
-        """
-        BFS 距离场: 从所有目标点出发, 计算每个格子到最近目标点的距离.
-        不可达格子标记为 999.
-        """
+    def _build_distance_map(self, target_grid, terrain, owner=None):
+        """BFS 距离场: 从所有目标点出发, 计算每个格子到最近目标点的距离"""
         GS = self.grid_size
         dist = np.full((GS, GS), 999, dtype=np.int32)
         q = deque()
 
-        # 初始化: 所有目标点 dist=0
         for y in range(GS):
             for x in range(GS):
                 if target_grid[y, x]:
                     dist[y, x] = 0
                     q.append((y, x))
 
-        # BFS
         while q:
             cy, cx = q.popleft()
             for dr, dc in self.dirs:
@@ -147,6 +176,7 @@ class ScriptBot:
 
 # 保持向后兼容
 ScriptBotV3 = ScriptBot
+ScriptBotV4 = ScriptBot
 
 
 # ============================================================
@@ -184,17 +214,18 @@ if __name__ == "__main__":
 
     bot = ScriptBot(player_id=1, grid_size=12)
 
-    print("=== ScriptBot V4 (Strict Flow Field) ===\n")
+    print("=== ScriptBot V5 (Defense Radar) ===\n")
 
-    # 找将军
-    bg = None
+    blue_gen = None
     for y in range(12):
         for x in range(12):
             if terrain[y,x] == 2 and owner[y,x] == 1:
-                bg = (x, y)
-    print(f"Blue general: {bg}")
+                blue_gen = (x, y)
+    print(f"Blue general: {blue_gen}")
 
     action_log = []
+    defense_triggers = 0
+
     for step in range(300):
         if lib.generals_get_winner(state) != -1:
             print(f"Game over at step {step}, winner: {lib.generals_get_winner(state)}")
@@ -223,7 +254,6 @@ if __name__ == "__main__":
 
     print(f"\nFinal: Blue {blue_tiles} tiles / {blue_army} army, Red {red_tiles} tiles / {red_army} army")
 
-    # Max tile
     max_a = 0
     max_pos = None
     for y in range(12):
@@ -243,4 +273,4 @@ if __name__ == "__main__":
             print(f"  SKIP")
 
     lib.generals_destroy(state)
-    print("\n=== V4 Test Complete ===")
+    print("\n=== V5 Test Complete ===")
