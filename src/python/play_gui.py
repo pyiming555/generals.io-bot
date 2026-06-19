@@ -465,18 +465,31 @@ class GeneralsGUI:
         if is_fogged:
             # 迷雾区: 只画地形轮廓 (暗色)，不画兵力
             t = terrain[y, x]
-            if t == 1:  # MOUNTAIN
-                color = (25, 25, 25)
-            elif t == 3:  # CITY
-                color = (60, 55, 20)
-            elif t == 2:  # GENERAL
-                color = (40, 40, 40)
+            if t == 1:  # MOUNTAIN: 深灰三角形轮廓
+                color = (30, 30, 30)
+                pygame.draw.rect(self.screen, color, rect, border_radius=3)
+                # 山脉三角
+                cx, cy = rect.center
+                pts = [(cx, cy - 12), (cx - 10, cy + 8), (cx + 10, cy + 8)]
+                pygame.draw.polygon(self.screen, (50, 50, 50), pts)
+            elif t == 3:  # CITY: 暗黄色方块轮廓
+                color = (50, 45, 15)
+                pygame.draw.rect(self.screen, color, rect, border_radius=3)
+                # 城市方块
+                inner = rect.inflate(-16, -16)
+                pygame.draw.rect(self.screen, (80, 70, 25), inner, border_radius=2)
+            elif t == 2:  # GENERAL: 暗色菱形
+                color = (35, 35, 35)
+                pygame.draw.rect(self.screen, color, rect, border_radius=3)
+                cx, cy = rect.center
+                pts = [(cx, cy - 10), (cx + 10, cy), (cx, cy + 10), (cx - 10, cy)]
+                pygame.draw.polygon(self.screen, (60, 60, 60), pts)
             else:
                 color = COLORS["fog"]
-            pygame.draw.rect(self.screen, color, rect, border_radius=3)
-            # 迷雾标记: 画一个半透明层
+                pygame.draw.rect(self.screen, color, rect, border_radius=3)
+            # 迷雾标记: 半透明覆盖
             s = pygame.Surface((TILE_SIZE - 2, TILE_SIZE - 2), pygame.SRCALPHA)
-            s.fill((0, 0, 0, 120))
+            s.fill((0, 0, 0, 100))
             self.screen.blit(s, rect)
             return
 
@@ -487,8 +500,13 @@ class GeneralsGUI:
 
         if t == 1:  # MOUNTAIN
             color = COLORS["mountain"]
-        elif t == 3:  # CITY
-            color = COLORS["city"]
+        elif t == 3:  # CITY: 根据占领者变色
+            if o == 0:
+                color = (200, 170, 50)  # 红方占领: 亮红黄
+            elif o == 1:
+                color = (80, 80, 200)  # 蓝方占领: 亮蓝
+            else:
+                color = COLORS["city"]  # 中立: 黄色
         elif t == 2:  # GENERAL
             color = COLORS["general_red"] if o == 0 else COLORS["general_blue"]
         elif o == 0:
@@ -502,7 +520,7 @@ class GeneralsGUI:
 
         # 兵力数字
         if a > 0 and t != 1:
-            # 根据背景亮度选文字色
+            # 城池/领地兵力
             brightness = color[0] * 0.299 + color[1] * 0.587 + color[2] * 0.114
             text_color = (255, 255, 255) if brightness < 128 else (20, 20, 20)
             txt = self.font.render(str(int(a)), True, text_color)
