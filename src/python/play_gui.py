@@ -741,6 +741,8 @@ class GeneralsGUI:
 
                     elif event.key == pygame.K_f:
                         self.show_fog = not self.show_fog
+
+                    elif event.key == pygame.K_r:
                         # 重新开始
                         seed = np.random.randint(0, 2**31)
                         _lib.generals_reset(self.state, seed)
@@ -751,6 +753,7 @@ class GeneralsGUI:
                         self.game_over = False
                         self.winner = -1
                         self.selected_tile = None
+                        self.pending_human_action = None
                         self.mode = "PLAY"
 
                     elif event.key == pygame.K_SPACE:
