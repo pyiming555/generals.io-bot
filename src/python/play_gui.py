@@ -695,6 +695,13 @@ class GeneralsGUI:
                                     self.draw_arrow(sx, sy, tx, ty, d, alpha=180)
                                     break
 
+        # --- AI 模式指示器 (右上角) ---
+        ai_label = f"AI: {self.ai_mode.upper()}"
+        ai_color = (0, 200, 255) if self.ai_mode == "mcts" else (255, 165, 0)
+        txt_ai = self.font.render(ai_label, True, ai_color)
+        ai_rect = txt_ai.get_rect(topright=(WIDTH - 10, 5))
+        self.screen.blit(txt_ai, ai_rect)
+
         self.draw_ui()
         pygame.display.flip()
 
